@@ -1,0 +1,3 @@
+[submodule "Trilium"]
+	path = Trilium
+	url = https://github.com/TriliumNext/Trilium
