@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { getClient, type CliGlobalArgs } from "../config.js";
 import { formatOutput, outputBinary, type OutputFormat } from "../output.js";
 import { handleError } from "../errors.js";
+import { readStdin } from "../stdin.js";
 
 export function registerNotesCommands(yargs: Argv) {
     return yargs
@@ -148,6 +149,12 @@ export function registerNotesCommands(yargs: Argv) {
                     .option("utc-date-created", {
                         type: "string",
                         description: "Set creation date (UTC)",
+                    })
+                    .check((a) => {
+                        if (a.content && a.file) {
+                            throw new Error("Provide only one of --content or --file, not both.");
+                        }
+                        return true;
                     }),
             async (argv) => {
                 try {
@@ -157,7 +164,8 @@ export function registerNotesCommands(yargs: Argv) {
                     } else if (argv.content !== undefined) {
                         noteContent = argv.content as string;
                     } else {
-                        noteContent = "";
+                        const stdinData = await readStdin();
+                        noteContent = stdinData !== null ? stdinData.toString("utf-8") : "";
                     }
 
                     const client = getClient(argv as CliGlobalArgs);
@@ -285,6 +293,12 @@ export function registerNotesCommands(yargs: Argv) {
                     .option("file", {
                         type: "string",
                         description: "Path to file whose contents will be uploaded",
+                    })
+                    .check((a) => {
+                        if (a.content && a.file) {
+                            throw new Error("Provide only one of --content or --file, not both.");
+                        }
+                        return true;
                     }),
             async (argv) => {
                 try {
@@ -294,7 +308,12 @@ export function registerNotesCommands(yargs: Argv) {
                     } else if (argv.content !== undefined) {
                         body = argv.content as string;
                     } else {
-                        throw new Error("Provide either --content or --file");
+                        const stdinData = await readStdin();
+                        if (stdinData !== null) {
+                            body = stdinData;
+                        } else {
+                            throw new Error("Provide --content, --file, or pipe data via stdin");
+                        }
                     }
 
                     const client = getClient(argv as CliGlobalArgs);

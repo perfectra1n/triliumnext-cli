@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { getClient, type CliGlobalArgs } from "../config.js";
 import { formatOutput, outputBinary, type OutputFormat } from "../output.js";
 import { handleError } from "../errors.js";
+import { readStdin } from "../stdin.js";
 
 export function registerAttachmentsCommands(yargs: Argv) {
     return yargs
@@ -82,9 +83,6 @@ export function registerAttachmentsCommands(yargs: Argv) {
                         description: "Position for ordering",
                     })
                     .check((a) => {
-                        if (!a.content && !a.file) {
-                            throw new Error("Either --content or --file must be provided.");
-                        }
                         if (a.content && a.file) {
                             throw new Error("Provide only one of --content or --file, not both.");
                         }
@@ -92,9 +90,19 @@ export function registerAttachmentsCommands(yargs: Argv) {
                     }),
             async (argv) => {
                 try {
-                    const contentValue = argv.file
-                        ? readFileSync(argv.file as string, "utf-8")
-                        : (argv.content as string);
+                    let contentValue: string;
+                    if (argv.file) {
+                        contentValue = readFileSync(argv.file as string, "utf-8");
+                    } else if (argv.content !== undefined) {
+                        contentValue = argv.content as string;
+                    } else {
+                        const stdinData = await readStdin();
+                        if (stdinData !== null) {
+                            contentValue = stdinData.toString("utf-8");
+                        } else {
+                            throw new Error("Provide --content, --file, or pipe data via stdin");
+                        }
+                    }
 
                     const client = getClient(argv as CliGlobalArgs);
                     const result = await client.createAttachment({
@@ -216,9 +224,6 @@ export function registerAttachmentsCommands(yargs: Argv) {
                         description: "Path to a file to read as content",
                     })
                     .check((a) => {
-                        if (!a.content && !a.file) {
-                            throw new Error("Either --content or --file must be provided.");
-                        }
                         if (a.content && a.file) {
                             throw new Error("Provide only one of --content or --file, not both.");
                         }
@@ -226,9 +231,19 @@ export function registerAttachmentsCommands(yargs: Argv) {
                     }),
             async (argv) => {
                 try {
-                    const contentValue = argv.file
-                        ? readFileSync(argv.file as string)
-                        : Buffer.from(argv.content as string, "utf-8");
+                    let contentValue: Buffer;
+                    if (argv.file) {
+                        contentValue = readFileSync(argv.file as string);
+                    } else if (argv.content !== undefined) {
+                        contentValue = Buffer.from(argv.content as string, "utf-8");
+                    } else {
+                        const stdinData = await readStdin();
+                        if (stdinData !== null) {
+                            contentValue = stdinData;
+                        } else {
+                            throw new Error("Provide --content, --file, or pipe data via stdin");
+                        }
+                    }
 
                     const client = getClient(argv as CliGlobalArgs);
                     await client.putAttachmentContent(argv.attachmentId as string, contentValue);
