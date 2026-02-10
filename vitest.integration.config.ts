@@ -8,11 +8,12 @@ export default defineConfig({
     testTimeout: 60000, // 60s for API calls
     hookTimeout: 120000, // 120s for container startup
     pool: 'forks',
-    poolOptions: {
-      forks: {
-        singleFork: true, // Single-threaded to avoid container conflicts
-      },
-    },
+    // Vitest 4: singleFork moved to top level
+    singleFork: true, // Single process to share container state
+    // Run test files sequentially to avoid container conflicts
+    fileParallelism: false,
+    // Global setup to start container once for all tests
+    globalSetup: './tests/integration/global-setup.ts',
   },
   resolve: {
     alias: {
