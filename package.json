@@ -8,7 +8,13 @@
   "scripts": {
     "dev": "tsx src/main.ts",
     "build": "tsx esbuild.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:integration:watch": "vitest --config vitest.integration.config.ts",
+    "test:coverage": "vitest run --coverage",
+    "test:all": "npm run test && npm run test:integration"
   },
   "engines": {
     "node": ">=20"
@@ -17,10 +23,13 @@
     "yargs": "18.0.0"
   },
   "devDependencies": {
-    "typescript": "~5.8.0",
-    "tsx": "~4.21.0",
-    "esbuild": "~0.25.0",
     "@types/node": "^22.0.0",
-    "@types/yargs": "~17.0.35"
+    "@types/yargs": "~17.0.35",
+    "@vitest/coverage-v8": "^4.0.18",
+    "esbuild": "~0.25.0",
+    "testcontainers": "^11.11.0",
+    "tsx": "~4.21.0",
+    "typescript": "~5.8.0",
+    "vitest": "^4.0.18"
   }
 }
