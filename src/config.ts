@@ -96,17 +96,22 @@ export function resolveConfig(argv: CliGlobalArgs): {
     DEFAULT_SERVER_URL;
 
   // --- authToken (flag > env > file) ---
-  const authToken =
-    argv.token ||
-    process.env.TRILIUM_TOKEN ||
-    fileConfig?.authToken ||
-    "";
+  // Check each source explicitly to allow empty string tokens (for no-auth mode)
+  let authToken: string | undefined;
+  if (argv.token !== undefined) {
+    authToken = argv.token;
+  } else if (process.env.TRILIUM_TOKEN !== undefined) {
+    authToken = process.env.TRILIUM_TOKEN;
+  } else if (fileConfig?.authToken !== undefined) {
+    authToken = fileConfig.authToken;
+  }
 
-  if (!authToken) {
+  // Only throw error if token is completely missing (not just empty)
+  if (authToken === undefined) {
     throw new Error(
       "Cannot resolve auth token. " +
         "Provide it via --token, the TRILIUM_TOKEN environment variable, or a config file " +
-        `(${CONFIG_PATH_PRIMARY}).`
+        `(${CONFIG_PATH_PRIMARY}). Use --token=\"\" for no-auth mode.`
     );
   }
 

@@ -20,7 +20,7 @@ describe('System commands integration', () => {
     it('retrieves app info via CLI', async () => {
       const config = getTriliumConfig();
       const result = await runCliSuccess(
-        ['app-info', '--format', 'json'],
+        ['system', 'info', '--format', 'json'],
         {
           env: {
             TRILIUM_URL: config.url,
@@ -37,7 +37,7 @@ describe('System commands integration', () => {
     it('displays app info in table format', async () => {
       const config = getTriliumConfig();
       const result = await runCliSuccess(
-        ['app-info', '--format', 'table'],
+        ['system', 'info', '--format', 'table'],
         {
           env: {
             TRILIUM_URL: config.url,
@@ -64,12 +64,13 @@ describe('System commands integration', () => {
       const config = getTriliumConfig();
       const backupName = `cli-test-backup-${Date.now()}`;
 
+      // Pass token explicitly via CLI args (handles empty token case)
       const result = await runCliSuccess(
-        ['backup', backupName],
+        ['system', 'backup', backupName, '--server', config.url, '--token', config.token || ''],
         {
           env: {
             TRILIUM_URL: config.url,
-            TRILIUM_TOKEN: config.token,
+            TRILIUM_TOKEN: config.token || '',
           },
         }
       );

@@ -4,6 +4,7 @@ import { getClient, type CliGlobalArgs } from "../config.js";
 import { formatOutput, outputBinary, type OutputFormat } from "../output.js";
 import { handleError } from "../errors.js";
 import { readStdin } from "../stdin.js";
+import { convertToHtml } from "../utils/markdown.js";
 
 export function registerNotesCommands(yargs: Argv) {
     return yargs
@@ -150,6 +151,15 @@ export function registerNotesCommands(yargs: Argv) {
                         type: "string",
                         description: "Set creation date (UTC)",
                     })
+                    .option("markdown", {
+                        type: "boolean",
+                        description: "Treat content as markdown and convert to HTML",
+                    })
+                    .option("format-content", {
+                        type: "string",
+                        choices: ["auto", "markdown", "html", "plain"] as const,
+                        description: "Content format (auto-detected if not specified)",
+                    })
                     .check((a) => {
                         if (a.content && a.file) {
                             throw new Error("Provide only one of --content or --file, not both.");
@@ -166,6 +176,16 @@ export function registerNotesCommands(yargs: Argv) {
                     } else {
                         const stdinData = await readStdin();
                         noteContent = stdinData !== null ? stdinData.toString("utf-8") : "";
+                    }
+
+                    // Convert markdown to HTML if requested or auto-detected
+                    if (argv.markdown || argv.formatContent) {
+                        const format = argv.formatContent as "auto" | "markdown" | "html" | "plain" | undefined;
+                        if (argv.markdown || format === "markdown") {
+                            noteContent = convertToHtml(noteContent, "markdown");
+                        } else if (format && format !== "html") {
+                            noteContent = convertToHtml(noteContent, format === "auto" ? undefined : format);
+                        }
                     }
 
                     const client = getClient(argv as CliGlobalArgs);
@@ -294,6 +314,15 @@ export function registerNotesCommands(yargs: Argv) {
                         type: "string",
                         description: "Path to file whose contents will be uploaded",
                     })
+                    .option("markdown", {
+                        type: "boolean",
+                        description: "Treat content as markdown and convert to HTML",
+                    })
+                    .option("format-content", {
+                        type: "string",
+                        choices: ["auto", "markdown", "html", "plain"] as const,
+                        description: "Content format (auto-detected if not specified)",
+                    })
                     .check((a) => {
                         if (a.content && a.file) {
                             throw new Error("Provide only one of --content or --file, not both.");
@@ -314,6 +343,26 @@ export function registerNotesCommands(yargs: Argv) {
                         } else {
                             throw new Error("Provide --content, --file, or pipe data via stdin");
                         }
+                    }
+
+                    // Convert markdown to HTML if requested
+                    if ((argv.markdown || argv.formatContent) && typeof body === 'string') {
+                        const format = argv.formatContent as "auto" | "markdown" | "html" | "plain" | undefined;
+                        if (argv.markdown || format === "markdown") {
+                            body = convertToHtml(body, "markdown");
+                        } else if (format && format !== "html") {
+                            body = convertToHtml(body, format === "auto" ? undefined : format);
+                        }
+                    } else if ((argv.markdown || argv.formatContent) && Buffer.isBuffer(body)) {
+                        // Convert Buffer to string for markdown processing
+                        let content = body.toString("utf-8");
+                        const format = argv.formatContent as "auto" | "markdown" | "html" | "plain" | undefined;
+                        if (argv.markdown || format === "markdown") {
+                            content = convertToHtml(content, "markdown");
+                        } else if (format && format !== "html") {
+                            content = convertToHtml(content, format === "auto" ? undefined : format);
+                        }
+                        body = content;
                     }
 
                     const client = getClient(argv as CliGlobalArgs);
