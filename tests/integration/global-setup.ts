@@ -61,7 +61,7 @@ export async function setup(): Promise<() => Promise<void>> {
   // Start Docker container
   console.log('Starting Trilium Docker container for all tests...');
 
-  const container = await new GenericContainer('triliumnext/notes:latest')
+  const container = await new GenericContainer('triliumnext/trilium:latest')
     .withExposedPorts(8080)
     .withEnvironment({
       TRILIUM_DATA_DIR: '/home/node/trilium-data',
