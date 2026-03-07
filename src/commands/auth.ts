@@ -2,27 +2,9 @@ import type { Argv } from "yargs";
 import { type CliGlobalArgs, resolveConfig, saveConfig } from "../config.js";
 import { handleError } from "../errors.js";
 import { EtapiClient } from "../client/index.js";
-import { createInterface } from "node:readline";
+import { read } from "read";
 
 const DEFAULT_SERVER_URL = "http://localhost:37740";
-
-/**
- * Prompt the user for input on stdin/stdout. Returns the entered string.
- * The prompt text is written to stdout and the response is read from stdin.
- */
-function prompt(question: string): Promise<string> {
-    const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-    });
-
-    return new Promise<string>((resolve) => {
-        rl.question(question, (answer) => {
-            rl.close();
-            resolve(answer);
-        });
-    });
-}
 
 export function registerAuthCommands(yargs: Argv) {
     return yargs
@@ -35,12 +17,16 @@ export function registerAuthCommands(yargs: Argv) {
                     // Resolve the server URL without requiring an existing token.
                     // resolveConfig() throws when no token is available, so we
                     // determine the server URL manually using the same precedence.
-                    const serverUrl =
+                    let serverUrl =
                         (argv as CliGlobalArgs).server ||
                         process.env.TRILIUM_URL ||
-                        DEFAULT_SERVER_URL;
+                        "";
 
-                    const password = await prompt("Password: ");
+                    if (!serverUrl) {
+                        serverUrl = (await read({ prompt: `Server URL [${DEFAULT_SERVER_URL}]: ` })).trim() || DEFAULT_SERVER_URL;
+                    }
+
+                    const password = await read({ prompt: "Password: ", replace: "*" });
 
                     const result = await EtapiClient.login(serverUrl, password);
 

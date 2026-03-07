@@ -15,11 +15,14 @@ A command-line interface for [TriliumNext Notes](https://github.com/TriliumNext/
 
 ```bash
 # Clone and build
-git clone --recurse-submodules https://github.com/TriliumNext/cli.git
+git clone --recurse-submodules https://github.com/perfectra1n/triliumnext-cli
 cd cli
 bun install
 bun run build
+```
 
+Then to link, so you can run `trilium` to access the CLI from anywhere:
+```bash
 # Link globally (optional)
 bun link
 ```

@@ -20,6 +20,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "read": "^5.0.1",
     "yargs": "18.0.0"
   },
   "devDependencies": {
