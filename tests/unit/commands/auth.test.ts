@@ -96,6 +96,7 @@ describe('auth commands', () => {
       const MockClient = EtapiClient as any;
       MockClient.mockLogin.mockResolvedValue({
         authToken: 'new-token-123',
+        resolvedBaseUrl: 'http://localhost:8080/etapi',
       });
 
       registerAuthCommands(mockYargs as unknown as Argv);
@@ -108,7 +109,7 @@ describe('auth commands', () => {
         'test-password'
       );
       expect(saveConfig).toHaveBeenCalledWith({
-        serverUrl: 'http://localhost:8080',
+        serverUrl: 'http://localhost:8080/etapi',
         authToken: 'new-token-123',
       });
       expect(consoleLogSpy).toHaveBeenCalledWith(
@@ -122,6 +123,7 @@ describe('auth commands', () => {
       const MockClient = EtapiClient as any;
       MockClient.mockLogin.mockResolvedValue({
         authToken: 'env-token',
+        resolvedBaseUrl: 'http://env-server:9090/etapi',
       });
 
       registerAuthCommands(mockYargs as unknown as Argv);
@@ -143,6 +145,7 @@ describe('auth commands', () => {
       const MockClient = EtapiClient as any;
       MockClient.mockLogin.mockResolvedValue({
         authToken: 'default-token',
+        resolvedBaseUrl: 'http://localhost:37740/etapi',
       });
 
       registerAuthCommands(mockYargs as unknown as Argv);

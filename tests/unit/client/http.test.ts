@@ -40,6 +40,61 @@ describe('HttpClient', () => {
         expect.any(Object)
       );
     });
+
+    it('adds https:// when no protocol is provided', async () => {
+      const c = new HttpClient('my-server.example.com', 'token');
+      fetchMock.mockResolvedValue(mockJsonResponse({}));
+      await c.get('/test');
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://my-server.example.com/etapi/test',
+        expect.any(Object)
+      );
+    });
+
+    it('falls back to http:// when https:// fails with network error and protocol was auto-added', async () => {
+      const networkError = new Error('fetch failed');
+      (networkError as any).cause = { code: 'ECONNREFUSED' };
+      fetchMock
+        .mockRejectedValueOnce(networkError)    // https fails
+        .mockResolvedValueOnce(mockJsonResponse({ ok: true }));  // http succeeds
+
+      const c = new HttpClient('my-server.example.com', 'token');
+      const result = await c.get('/test');
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[0][0]).toBe('https://my-server.example.com/etapi/test');
+      expect(fetchMock.mock.calls[1][0]).toBe('http://my-server.example.com/etapi/test');
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('does not fall back when protocol was explicitly provided', async () => {
+      const networkError = new Error('fetch failed');
+      (networkError as any).cause = { code: 'ECONNREFUSED' };
+      fetchMock.mockRejectedValue(networkError);
+
+      const c = new HttpClient('https://my-server.example.com', 'token');
+      await expect(c.get('/test')).rejects.toThrow();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('uses resolved protocol for subsequent requests after fallback', async () => {
+      const networkError = new Error('fetch failed');
+      (networkError as any).cause = { code: 'ECONNREFUSED' };
+      fetchMock
+        .mockRejectedValueOnce(networkError)
+        .mockResolvedValue(mockJsonResponse({ ok: true }));
+
+      const c = new HttpClient('my-server.example.com', 'token');
+      await c.get('/first');
+
+      fetchMock.mockClear();
+      fetchMock.mockResolvedValue(mockJsonResponse({ ok: true }));
+      await c.get('/second');
+
+      // Second request should go directly to http (no retry)
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(fetchMock.mock.calls[0][0]).toBe('http://my-server.example.com/etapi/second');
+    });
   });
 
   describe('get()', () => {
@@ -383,7 +438,7 @@ describe('HttpClient', () => {
           body: JSON.stringify({ password: 'secret' }),
         })
       );
-      expect(result).toEqual(responseData);
+      expect(result).toEqual({ data: responseData, resolvedBaseUrl: 'http://localhost:8080/etapi' });
     });
 
     it('handles baseUrl with /etapi suffix', async () => {
@@ -414,6 +469,26 @@ describe('HttpClient', () => {
         code: 'UNAUTHORIZED',
         message: 'Invalid password',
       });
+    });
+
+    it('normalizes bare hostname and tries https then http', async () => {
+      const networkError = new Error('fetch failed');
+      (networkError as any).cause = { code: 'ECONNREFUSED' };
+      const responseData = { authToken: 'token-123' };
+      fetchMock
+        .mockRejectedValueOnce(networkError)
+        .mockResolvedValueOnce(mockJsonResponse(responseData));
+
+      const result = await HttpClient.postNoAuth(
+        'trilium.example.com',
+        '/auth/login',
+        { password: 'secret' }
+      );
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(fetchMock.mock.calls[0][0]).toBe('https://trilium.example.com/etapi/auth/login');
+      expect(fetchMock.mock.calls[1][0]).toBe('http://trilium.example.com/etapi/auth/login');
+      expect(result).toEqual({ data: responseData, resolvedBaseUrl: 'http://trilium.example.com/etapi' });
     });
   });
 });

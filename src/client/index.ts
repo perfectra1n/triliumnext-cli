@@ -100,8 +100,9 @@ export class EtapiClient {
     }
 
     // ── Auth ────────────────────────────────────────────────────
-    static async login(baseUrl: string, password: string): Promise<EtapiLoginResponse> {
-        return HttpClient.postNoAuth<EtapiLoginResponse>(baseUrl, "/auth/login", { password });
+    static async login(baseUrl: string, password: string): Promise<EtapiLoginResponse & { resolvedBaseUrl: string }> {
+        const { data, resolvedBaseUrl } = await HttpClient.postNoAuth<EtapiLoginResponse>(baseUrl, "/auth/login", { password });
+        return { ...data, resolvedBaseUrl };
     }
 
     async logout(): Promise<void> {

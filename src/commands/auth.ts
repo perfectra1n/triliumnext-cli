@@ -44,10 +44,10 @@ export function registerAuthCommands(yargs: Argv) {
 
                     const result = await EtapiClient.login(serverUrl, password);
 
-                    saveConfig({ serverUrl, authToken: result.authToken });
+                    saveConfig({ serverUrl: result.resolvedBaseUrl, authToken: result.authToken });
 
                     console.log(
-                        `Login successful. Auth token saved for ${serverUrl}.`
+                        `Login successful. Auth token saved for ${result.resolvedBaseUrl}.`
                     );
                 } catch (e) {
                     handleError(e);

@@ -22,7 +22,7 @@ describe('EtapiClient', () => {
 
       const result = await EtapiClient.login('http://localhost:8080', 'password123');
 
-      expect(result).toEqual(response);
+      expect(result).toEqual({ ...response, resolvedBaseUrl: 'http://localhost:8080/etapi' });
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining('/auth/login'),
         expect.objectContaining({

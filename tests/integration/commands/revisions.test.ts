@@ -65,7 +65,7 @@ describe('Revisions integration tests', () => {
     expect(revision.revisionId).toBeDefined();
     expect(revision.noteId).toBe(testNoteId);
     expect(revision.type).toBeDefined();
-    expect(revision.dateModified).toBeDefined();
+    expect(revision.dateLastEdited).toBeDefined();
   });
 
   it('gets revision metadata', async () => {
@@ -88,7 +88,7 @@ describe('Revisions integration tests', () => {
     expect(revision.type).toBeDefined();
     expect(revision.mime).toBeDefined();
     expect(revision.title).toBeDefined();
-    expect(revision.dateModified).toBeDefined();
+    expect(revision.dateLastEdited).toBeDefined();
   });
 
   it('gets revision content', async () => {
