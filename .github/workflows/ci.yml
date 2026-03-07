@@ -70,6 +70,10 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - run: bun install
 
       - name: Pull Trilium image
