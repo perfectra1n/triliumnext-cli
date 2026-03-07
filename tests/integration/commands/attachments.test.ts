@@ -234,4 +234,91 @@ describe('Attachments integration tests', () => {
     expect(decodedContent[2]).toBe(0x4e);
     expect(decodedContent[3]).toBe(0x47);
   });
+
+  describe('Multiple MIME types', () => {
+    it('preserves image/jpeg MIME type', async () => {
+      const client = createTestClient();
+      const content = Buffer.from('fake jpeg data').toString('base64');
+
+      const attachment = await client.createAttachment({
+        ownerId: testNoteId,
+        role: 'image',
+        mime: 'image/jpeg',
+        title: 'photo.jpg',
+        content,
+      });
+      createdAttachmentIds.push(attachment.attachmentId);
+
+      expect(attachment.mime).toBe('image/jpeg');
+      expect(attachment.role).toBe('image');
+
+      const retrieved = await client.getAttachment(attachment.attachmentId);
+      expect(retrieved.mime).toBe('image/jpeg');
+    });
+
+    it('preserves application/pdf MIME type', async () => {
+      const client = createTestClient();
+      const content = Buffer.from('%PDF-1.4 fake pdf').toString('base64');
+
+      const attachment = await client.createAttachment({
+        ownerId: testNoteId,
+        role: 'file',
+        mime: 'application/pdf',
+        title: 'document.pdf',
+        content,
+      });
+      createdAttachmentIds.push(attachment.attachmentId);
+
+      expect(attachment.mime).toBe('application/pdf');
+      expect(attachment.role).toBe('file');
+    });
+
+    it('preserves text/csv MIME type', async () => {
+      const client = createTestClient();
+      const content = Buffer.from('name,value\nfoo,1\nbar,2').toString('base64');
+
+      const attachment = await client.createAttachment({
+        ownerId: testNoteId,
+        role: 'file',
+        mime: 'text/csv',
+        title: 'data.csv',
+        content,
+      });
+      createdAttachmentIds.push(attachment.attachmentId);
+
+      expect(attachment.mime).toBe('text/csv');
+    });
+  });
+
+  it('handles large binary attachment (50KB+)', async () => {
+    const client = createTestClient();
+
+    // Create 50KB of random-ish binary data
+    const largeData = Buffer.alloc(50 * 1024);
+    for (let i = 0; i < largeData.length; i++) {
+      largeData[i] = i % 256;
+    }
+
+    const attachment = await client.createAttachment({
+      ownerId: testNoteId,
+      role: 'file',
+      mime: 'application/octet-stream',
+      title: 'large-file.bin',
+      content: largeData.toString('base64'),
+    });
+    createdAttachmentIds.push(attachment.attachmentId);
+
+    expect(attachment.attachmentId).toBeDefined();
+
+    // Retrieve and verify content round-trip
+    const content = await client.getAttachmentContent(attachment.attachmentId);
+    expect(Buffer.isBuffer(content)).toBe(true);
+
+    const decoded = Buffer.from(content.toString(), 'base64');
+    expect(decoded.length).toBe(largeData.length);
+    // Verify first and last bytes
+    expect(decoded[0]).toBe(0);
+    expect(decoded[1]).toBe(1);
+    expect(decoded[decoded.length - 1]).toBe((50 * 1024 - 1) % 256);
+  });
 });
