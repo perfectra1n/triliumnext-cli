@@ -29,14 +29,12 @@ vi.mock('../../../src/client/index.js', () => {
   };
 });
 
-vi.mock('node:readline', () => ({
-  createInterface: vi.fn(() => ({
-    question: vi.fn((q: string, cb: (answer: string) => void) => {
-      // Automatically answer with 'test-password'
-      cb('test-password');
-    }),
-    close: vi.fn(),
-  })),
+vi.mock('read', () => ({
+  read: vi.fn(({ prompt }: { prompt: string }) => {
+    if (prompt.startsWith('Password')) return Promise.resolve('test-password');
+    if (prompt.startsWith('Server URL')) return Promise.resolve('');
+    return Promise.resolve('');
+  }),
 }));
 
 import { registerAuthCommands } from '../../../src/commands/auth.js';
