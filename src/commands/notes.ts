@@ -5,6 +5,7 @@ import { formatOutput, outputBinary, type OutputFormat } from "../output.js";
 import { handleError } from "../errors.js";
 import { readStdin } from "../stdin.js";
 import { convertToHtml } from "../utils/markdown.js";
+import { CREATABLE_NOTE_TYPES, type CreatableNoteType, type NoteType } from "../client/types.js";
 
 export function registerNotesCommands(yargs: Argv) {
     return yargs
@@ -113,7 +114,8 @@ export function registerNotesCommands(yargs: Argv) {
                     .option("type", {
                         type: "string",
                         demandOption: true,
-                        description: "Note type (text, code, file, image, search, book, relationMap, render)",
+                        choices: CREATABLE_NOTE_TYPES,
+                        description: "Note type",
                     })
                     .option("content", {
                         type: "string",
@@ -192,7 +194,7 @@ export function registerNotesCommands(yargs: Argv) {
                     const result = await client.createNote({
                         parentNoteId: argv.parent as string,
                         title: argv.title as string,
-                        type: argv.type as string,
+                        type: argv.type as CreatableNoteType,
                         content: noteContent,
                         mime: argv.mime as string | undefined,
                         notePosition: argv.position as number | undefined,
@@ -237,7 +239,7 @@ export function registerNotesCommands(yargs: Argv) {
                     const client = getClient(argv as CliGlobalArgs);
                     const result = await client.patchNote(argv.noteId as string, {
                         title: argv.title as string | undefined,
-                        type: argv.type as string | undefined,
+                        type: argv.type as NoteType | undefined,
                         mime: argv.mime as string | undefined,
                     });
                     formatOutput((argv.format ?? "json") as OutputFormat, result);

@@ -10,6 +10,8 @@ import type {
     EtapiLoginResponse,
     EtapiRecentChange,
     AppInfo,
+    NoteType,
+    CreatableNoteType,
 } from "./types.js";
 
 export type { AppInfo };
@@ -29,7 +31,7 @@ export interface SearchNotesParams {
 export interface CreateNoteParams {
     parentNoteId: string;
     title: string;
-    type: string;
+    type: CreatableNoteType;
     content: string;
     mime?: string;
     notePosition?: number;
@@ -42,7 +44,7 @@ export interface CreateNoteParams {
 
 export interface PatchNoteParams {
     title?: string;
-    type?: string;
+    type?: NoteType;
     mime?: string;
     dateCreated?: string;
     utcDateCreated?: string;

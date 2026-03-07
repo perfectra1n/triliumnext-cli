@@ -1,7 +1,20 @@
 import type { NoteType, AttributeType } from "@triliumnext/commons/lib/rows.js";
 import type { AppInfo } from "@triliumnext/commons/lib/server_api.js";
 
-export type { AppInfo };
+export type { AppInfo, NoteType, AttributeType };
+
+/**
+ * Note types accepted by the ETAPI create-note endpoint.
+ * This is a subset of the full NoteType — internal types like
+ * noteMap, launcher, contentWidget etc. cannot be created via ETAPI.
+ */
+export type CreatableNoteType = Extract<NoteType,
+    "text" | "code" | "file" | "image" | "search" | "book" | "relationMap" | "render"
+>;
+
+export const CREATABLE_NOTE_TYPES: readonly CreatableNoteType[] = [
+    "text", "code", "file", "image", "search", "book", "relationMap", "render",
+] as const;
 
 export interface EtapiAttribute {
     attributeId: string;
