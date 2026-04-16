@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "bun src/main.ts",
     "build": "bun run build.ts",
+    "build:compile": "bun build src/main.ts --compile --outfile trilium",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -20,11 +21,14 @@
     "node": ">=20"
   },
   "dependencies": {
+    "marked": "^17.0.1",
     "read": "^5.0.1",
+    "turndown": "^7.2.2",
     "yargs": "18.0.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/turndown": "^5.0.6",
     "@types/yargs": "~17.0.35",
     "@vitest/coverage-v8": "^4.0.18",
     "testcontainers": "^11.11.0",

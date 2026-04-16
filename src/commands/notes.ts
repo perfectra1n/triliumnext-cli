@@ -4,8 +4,14 @@ import { getClient, type CliGlobalArgs } from "../config.js";
 import { formatOutput, outputBinary, type OutputFormat } from "../output.js";
 import { handleError } from "../errors.js";
 import { readStdin } from "../stdin.js";
-import { convertToHtml } from "../utils/markdown.js";
+import { convertToHtml, htmlToMarkdown } from "../utils/markdown.js";
+import { loadAttachmentFromPath, processFiles, processImages } from "../utils/attachments.js";
 import { CREATABLE_NOTE_TYPES, type CreatableNoteType, type NoteType } from "../client/types.js";
+
+function toStringArray(v: unknown): string[] {
+    if (v === undefined) return [];
+    return Array.isArray(v) ? (v as string[]) : [v as string];
+}
 
 export function registerNotesCommands(yargs: Argv) {
     return yargs
@@ -162,6 +168,16 @@ export function registerNotesCommands(yargs: Argv) {
                         choices: ["auto", "markdown", "html", "plain"] as const,
                         description: "Content format (auto-detected if not specified)",
                     })
+                    .option("image", {
+                        type: "string",
+                        array: true,
+                        description: "Path to image to embed (repeatable). Reference in markdown as image:0, image:1, ...",
+                    })
+                    .option("attach-file", {
+                        type: "string",
+                        array: true,
+                        description: "Path to file to attach (repeatable). Reference in markdown as file:0, file:1, ...",
+                    })
                     .check((a) => {
                         if (a.content && a.file) {
                             throw new Error("Provide only one of --content or --file, not both.");
@@ -204,6 +220,20 @@ export function registerNotesCommands(yargs: Argv) {
                         dateCreated: argv.dateCreated as string | undefined,
                         utcDateCreated: argv.utcDateCreated as string | undefined,
                     });
+
+                    const imagePaths = toStringArray(argv.image);
+                    const filePaths = toStringArray(argv.attachFile);
+                    if (imagePaths.length || filePaths.length) {
+                        const images = imagePaths.map(loadAttachmentFromPath);
+                        const files = filePaths.map(loadAttachmentFromPath);
+                        let html = noteContent;
+                        html = await processImages(client, result.note.noteId, html, images);
+                        html = await processFiles(client, result.note.noteId, html, files);
+                        if (html !== noteContent) {
+                            await client.putNoteContent(result.note.noteId, html);
+                        }
+                    }
+
                     formatOutput((argv.format ?? "json") as OutputFormat, result);
                 } catch (e) {
                     handleError(e);
@@ -285,12 +315,24 @@ export function registerNotesCommands(yargs: Argv) {
                         alias: "o",
                         type: "string",
                         description: "Write content to file instead of stdout",
+                    })
+                    .option("as", {
+                        type: "string",
+                        choices: ["raw", "html", "markdown"] as const,
+                        description: "Output format for text notes (raw passes bytes through; markdown converts HTML→markdown)",
                     }),
             async (argv) => {
                 try {
                     const client = getClient(argv as CliGlobalArgs);
                     const data = await client.getNoteContent(argv.noteId as string);
-                    outputBinary(data, argv.output as string | undefined);
+                    const as = (argv.as as "raw" | "html" | "markdown" | undefined) ?? "raw";
+                    if (as === "raw") {
+                        outputBinary(data, argv.output as string | undefined);
+                    } else {
+                        const text = data.toString("utf-8");
+                        const out = as === "markdown" ? htmlToMarkdown(text) : text;
+                        outputBinary(Buffer.from(out, "utf-8"), argv.output as string | undefined);
+                    }
                 } catch (e) {
                     handleError(e);
                 }
@@ -324,6 +366,16 @@ export function registerNotesCommands(yargs: Argv) {
                         type: "string",
                         choices: ["auto", "markdown", "html", "plain"] as const,
                         description: "Content format (auto-detected if not specified)",
+                    })
+                    .option("image", {
+                        type: "string",
+                        array: true,
+                        description: "Path to image to embed (repeatable). Reference in markdown as image:0, image:1, ...",
+                    })
+                    .option("attach-file", {
+                        type: "string",
+                        array: true,
+                        description: "Path to file to attach (repeatable). Reference in markdown as file:0, file:1, ...",
                     })
                     .check((a) => {
                         if (a.content && a.file) {
@@ -368,6 +420,16 @@ export function registerNotesCommands(yargs: Argv) {
                     }
 
                     const client = getClient(argv as CliGlobalArgs);
+                    const imagePaths = toStringArray(argv.image);
+                    const filePaths = toStringArray(argv.attachFile);
+                    if (imagePaths.length || filePaths.length) {
+                        let html = typeof body === "string" ? body : body.toString("utf-8");
+                        const images = imagePaths.map(loadAttachmentFromPath);
+                        const files = filePaths.map(loadAttachmentFromPath);
+                        html = await processImages(client, argv.noteId as string, html, images);
+                        html = await processFiles(client, argv.noteId as string, html, files);
+                        body = html;
+                    }
                     await client.putNoteContent(argv.noteId as string, body);
                     formatOutput((argv.format ?? "json") as OutputFormat, { success: true });
                 } catch (e) {

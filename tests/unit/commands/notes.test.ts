@@ -144,6 +144,23 @@ describe('notes commands', () => {
         })
       );
     });
+
+    it('converts markdown content to HTML when --markdown is set', async () => {
+      const result = { note: { noteId: 'noteMD' }, branch: { branchId: 'brMD' } };
+      mockClient.createNote.mockResolvedValue(result);
+      registerNotesCommands(mockYargs as unknown as Argv);
+      await commandHandlers.get('create')!({
+        parent: 'root',
+        title: 'MD',
+        type: 'text',
+        content: '# Hello\n\nbody',
+        markdown: true,
+        format: 'json',
+      });
+      const call = mockClient.createNote.mock.calls[0][0];
+      expect(call.content).toContain('<h1>Hello</h1>');
+      expect(call.content).toContain('<p>body</p>');
+    });
   });
 
   describe('patch command', () => {
@@ -190,6 +207,32 @@ describe('notes commands', () => {
       await commandHandlers.get('get-content')!({ noteId: 'note123', output: '/tmp/note.html' });
       expect(outputBinary).toHaveBeenCalledWith(content, '/tmp/note.html');
     });
+
+    it('passes through bytes unchanged for --as raw (default)', async () => {
+      const content = Buffer.from('<h1>raw bytes</h1>');
+      mockClient.getNoteContent.mockResolvedValue(content);
+      registerNotesCommands(mockYargs as unknown as Argv);
+      await commandHandlers.get('get-content')!({ noteId: 'n', as: 'raw' });
+      expect(outputBinary).toHaveBeenCalledWith(content, undefined);
+    });
+
+    it('returns HTML decoded as text for --as html', async () => {
+      const content = Buffer.from('<h1>Title</h1>');
+      mockClient.getNoteContent.mockResolvedValue(content);
+      registerNotesCommands(mockYargs as unknown as Argv);
+      await commandHandlers.get('get-content')!({ noteId: 'n', as: 'html' });
+      const arg = vi.mocked(outputBinary).mock.calls[0][0] as Buffer;
+      expect(arg.toString('utf-8')).toBe('<h1>Title</h1>');
+    });
+
+    it('converts HTML to markdown for --as markdown', async () => {
+      const content = Buffer.from('<h1>Title</h1>');
+      mockClient.getNoteContent.mockResolvedValue(content);
+      registerNotesCommands(mockYargs as unknown as Argv);
+      await commandHandlers.get('get-content')!({ noteId: 'n', as: 'markdown' });
+      const arg = vi.mocked(outputBinary).mock.calls[0][0] as Buffer;
+      expect(arg.toString('utf-8').trimEnd()).toBe('# Title');
+    });
   });
 
   describe('set-content command', () => {
@@ -210,6 +253,19 @@ describe('notes commands', () => {
       await commandHandlers.get('set-content')!({ noteId: 'note123', format: 'json' });
       expect(readStdin).toHaveBeenCalled();
       expect(mockClient.putNoteContent).toHaveBeenCalledWith('note123', stdinContent);
+    });
+
+    it('converts markdown to HTML when --markdown is set', async () => {
+      mockClient.putNoteContent.mockResolvedValue(undefined);
+      registerNotesCommands(mockYargs as unknown as Argv);
+      await commandHandlers.get('set-content')!({
+        noteId: 'note123',
+        content: '## Sub\n\nbody',
+        markdown: true,
+        format: 'json',
+      });
+      const sentBody = mockClient.putNoteContent.mock.calls[0][1] as string;
+      expect(sentBody).toContain('<h2>Sub</h2>');
     });
   });
 

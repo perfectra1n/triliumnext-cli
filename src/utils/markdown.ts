@@ -1,173 +1,94 @@
-/**
- * Simple markdown to HTML converter for common patterns
- * This provides basic markdown support without heavy dependencies
- */
+import { marked } from "marked";
+import TurndownService from "turndown";
 
-/**
- * Convert markdown text to HTML
- * Supports common markdown patterns:
- * - Headers (#, ##, ###)
- * - Bold (**text** or __text__)
- * - Italic (*text* or _text_)
- * - Links ([text](url))
- * - Code blocks (```lang\ncode\n```)
- * - Inline code (`code`)
- * - Lists (- item or * item)
- * - Paragraphs (separated by blank lines)
- */
-export function markdownToHtml(markdown: string): string {
-  let html = markdown;
+export type ContentFormat = "markdown" | "html" | "plain";
 
-  // Code blocks (must be processed first to avoid conflicts)
-  html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, (_, lang, code) => {
-    const langClass = lang ? ` class="language-${lang}"` : '';
-    return `<pre><code${langClass}>${escapeHtml(code.trim())}</code></pre>`;
-  });
+const HTML_ESCAPE_MAP: Record<string, string> = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#039;",
+};
 
-  // Split into lines for line-by-line processing
-  const lines = html.split('\n');
-  const processedLines: string[] = [];
-  let inList = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i];
-
-    // Skip lines that are already in code blocks
-    if (line.includes('<pre><code')) {
-      processedLines.push(line);
-      continue;
-    }
-
-    // Headers
-    if (line.match(/^(#{1,6})\s+(.+)$/)) {
-      line = line.replace(/^(#{1,6})\s+(.+)$/, (_, hashes, content) => {
-        const level = hashes.length;
-        return `<h${level}>${processInlineMarkdown(content)}</h${level}>`;
-      });
-    }
-    // Unordered lists
-    else if (line.match(/^[\s]*[-*]\s+(.+)$/)) {
-      const content = line.replace(/^[\s]*[-*]\s+(.+)$/, '$1');
-      if (!inList) {
-        processedLines.push('<ul>');
-        inList = true;
-      }
-      line = `<li>${processInlineMarkdown(content)}</li>`;
-    }
-    // End list if we were in one and hit a non-list line
-    else if (inList && !line.match(/^[\s]*[-*]\s+/)) {
-      processedLines.push('</ul>');
-      inList = false;
-    }
-
-    // Paragraphs (non-empty lines that aren't already wrapped)
-    if (
-      line.trim() &&
-      !line.match(/^<[^>]+>/) &&
-      !line.includes('<pre><code') &&
-      !line.match(/^[\s]*[-*]\s+/)
-    ) {
-      line = `<p>${processInlineMarkdown(line)}</p>`;
-    }
-
-    processedLines.push(line);
-  }
-
-  // Close any open list
-  if (inList) {
-    processedLines.push('</ul>');
-  }
-
-  html = processedLines.join('\n');
-
-  return html;
-}
-
-/**
- * Process inline markdown patterns (bold, italic, links, inline code)
- */
-function processInlineMarkdown(text: string): string {
-  // Inline code (must be processed first)
-  text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
-
-  // Links
-  text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
-
-  // Bold (** or __)
-  text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  text = text.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-
-  // Italic (* or _) - must come after bold
-  text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  text = text.replace(/_([^_]+)_/g, '<em>$1</em>');
-
-  return text;
-}
-
-/**
- * Escape HTML special characters
- */
 function escapeHtml(text: string): string {
-  const map: Record<string, string> = {
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#039;',
-  };
-  return text.replace(/[&<>"']/g, (char) => map[char]);
+    return text.replace(/[&<>"']/g, (char) => HTML_ESCAPE_MAP[char]);
 }
 
-/**
- * Detect if content is likely markdown or HTML
- * @param content The content to check
- * @returns 'markdown' | 'html' | 'plain'
- */
-export function detectContentFormat(content: string): 'markdown' | 'html' | 'plain' {
-  // Check for HTML tags
-  if (content.match(/<[^>]+>/)) {
-    return 'html';
-  }
+export function markdownToHtml(md: string): string {
+    return marked.parse(md, { async: false }) as string;
+}
 
-  // Check for markdown patterns
-  const markdownPatterns = [
-    /^#{1,6}\s+/m, // Headers
-    /\*\*[^*]+\*\*/,  // Bold
-    /__[^_]+__/,  // Bold
-    /\[.+\]\(.+\)/, // Links
-    /^[-*]\s+/m, // Lists
-    /```/,  // Code blocks
-  ];
+let turndownInstance: TurndownService | null = null;
 
-  for (const pattern of markdownPatterns) {
-    if (content.match(pattern)) {
-      return 'markdown';
+function turndown(): TurndownService {
+    if (!turndownInstance) {
+        turndownInstance = new TurndownService({
+            headingStyle: "atx",
+            codeBlockStyle: "fenced",
+        });
     }
-  }
-
-  return 'plain';
+    return turndownInstance;
 }
 
-/**
- * Convert content to HTML based on detected or specified format
- * @param content The content to convert
- * @param format The format of the content (auto-detected if not specified)
- * @returns HTML content
- */
-export function convertToHtml(content: string, format?: 'markdown' | 'html' | 'plain'): string {
-  const detectedFormat = format || detectContentFormat(content);
+export function htmlToMarkdown(html: string): string {
+    return turndown().turndown(html);
+}
 
-  switch (detectedFormat) {
-    case 'markdown':
-      return markdownToHtml(content);
-    case 'html':
-      return content;
-    case 'plain':
-      // Wrap plain text in paragraphs
-      return content
+function plainToHtml(content: string): string {
+    return content
         .split(/\n\n+/)
         .filter((p) => p.trim())
         .map((p) => `<p>${escapeHtml(p.trim())}</p>`)
-        .join('\n');
-  }
+        .join("\n");
+}
+
+/**
+ * Detect whether content is HTML, markdown, or plain text.
+ *
+ * Conservative on HTML: only flags content that *starts* with a tag and has
+ * a matching closing tag, so paragraphs containing `2 < 3` aren't misclassified.
+ */
+export function detectContentFormat(content: string): ContentFormat {
+    const trimmed = content.trimStart();
+    if (trimmed.startsWith("<") && /<\/[a-zA-Z][\w-]*\s*>/.test(trimmed)) {
+        return "html";
+    }
+    const markdownSignals = [
+        /^```/m,
+        /^#{1,6}\s+\S/m,
+        /^[-*+]\s+\S/m,
+        /^\d+\.\s+\S/m,
+        /\[[^\]]+\]\([^)]+\)/,
+        /!\[[^\]]*\]\([^)]+\)/,
+        /^\|.+\|\s*$/m,
+        /^>\s+\S/m,
+    ];
+    if (markdownSignals.some((re) => re.test(content))) {
+        return "markdown";
+    }
+    return "plain";
+}
+
+export function convertToHtml(content: string, format?: ContentFormat): string {
+    const fmt = format ?? detectContentFormat(content);
+    switch (fmt) {
+        case "markdown":
+            return markdownToHtml(content);
+        case "html":
+            return content;
+        case "plain":
+            return plainToHtml(content);
+    }
+}
+
+/**
+ * Build a Trilium internal note-link anchor.
+ *
+ * Trilium expects `<a class="reference-link" href="#root/.../noteId" data-note-path="root/.../noteId">label</a>`.
+ * Caller is responsible for supplying a valid note path (e.g. `root/parentId/childId`).
+ */
+export function noteReferenceHtml(notePath: string, label: string): string {
+    const path = notePath.replace(/^#/, "");
+    return `<a class="reference-link" href="#${path}" data-note-path="${path}">${escapeHtml(label)}</a>`;
 }

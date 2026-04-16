@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { setupTriliumTests, createTestClient } from '../setup.js';
-import { convertToHtml } from '../../../src/utils/markdown.js';
+import { convertToHtml, htmlToMarkdown } from '../../../src/utils/markdown.js';
 
 // Setup Trilium container for all tests
 setupTriliumTests();
@@ -536,6 +536,46 @@ describe('Notes integration tests', () => {
       expect(contentStr).toContain('<em>');
       expect(contentStr).toContain('<strong>');
       expect(contentStr).toContain('<li>');
+    });
+
+    it('renders GFM tables and fenced code with language class on <code>', async () => {
+      const client = createTestClient();
+      const markdown = '| col1 | col2 |\n|------|------|\n| 1    | 2    |\n\n```js\nconst x = 1;\n```\n';
+      const html = convertToHtml(markdown, 'markdown');
+
+      const created = await client.createNote({
+        parentNoteId: 'root',
+        title: 'GFM Test',
+        type: 'text',
+        content: html,
+      });
+      createdNoteIds.push(created.note.noteId);
+
+      const stored = (await client.getNoteContent(created.note.noteId)).toString();
+      expect(stored).toContain('<table');
+      expect(stored).toContain('<th');
+      expect(stored).toContain('language-js');
+    });
+
+    it('round-trips markdown via htmlToMarkdown after Trilium storage', async () => {
+      const client = createTestClient();
+      const markdown = '# Heading\n\nA **bold** paragraph.\n\n- one\n- two\n';
+      const html = convertToHtml(markdown, 'markdown');
+
+      const created = await client.createNote({
+        parentNoteId: 'root',
+        title: 'MD Roundtrip',
+        type: 'text',
+        content: html,
+      });
+      createdNoteIds.push(created.note.noteId);
+
+      const stored = (await client.getNoteContent(created.note.noteId)).toString();
+      const back = htmlToMarkdown(stored);
+      expect(back).toContain('# Heading');
+      expect(back).toContain('**bold**');
+      expect(back).toMatch(/[-*]\s+one/);
+      expect(back).toMatch(/[-*]\s+two/);
     });
 
     it('round-trips markdown-created note through export', async () => {

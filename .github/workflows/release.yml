@@ -1,0 +1,120 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+      - run: bun run typecheck
+
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+      - run: bun run test -- --reporter=verbose
+
+  build-check:
+    name: Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: oven-sh/setup-bun@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - run: bun install
+      - run: bun run build
+
+      - name: Verify bundle exists
+        run: test -f dist/main.js
+
+      - name: Verify shebang
+        run: head -1 dist/main.js | grep -q '#!/usr/bin/env node'
+
+      - name: Smoke test (node)
+        run: node dist/main.js --help
+
+  release:
+    name: Build & Release
+    needs: [typecheck, unit-tests, build-check]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: oven-sh/setup-bun@v2
+
+      - run: bun install
+
+      - name: Compile standalone binaries
+        run: |
+          mkdir -p release
+          targets=("linux-x64" "linux-arm64" "darwin-x64" "darwin-arm64" "windows-x64")
+          for target in "${targets[@]}"; do
+            outfile="trilium-${target}"
+            if [[ "$target" == windows-* ]]; then
+              outfile="${outfile}.exe"
+            fi
+            echo "::group::Compiling ${target}"
+            bun build src/main.ts --compile --target "bun-${target}" --outfile "release/${outfile}"
+            echo "::endgroup::"
+          done
+
+      - name: Create archives
+        run: |
+          cd release
+          for f in trilium-linux-* trilium-darwin-*; do
+            [[ "$f" == *.tar.gz ]] && continue
+            tar czf "${f}.tar.gz" "$f"
+          done
+          for f in trilium-windows-*.exe; do
+            zip "${f%.exe}.zip" "$f"
+          done
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Smoke test (linux-x64)
+        run: |
+          chmod +x release/trilium-linux-x64
+          ./release/trilium-linux-x64 --help
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
+            release/* \
+            --title "triliumnext-cli ${{ github.ref_name }}" \
+            --generate-notes
