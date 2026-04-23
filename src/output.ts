@@ -5,7 +5,7 @@ import fs from "node:fs";
 // ---------------------------------------------------------------------------
 
 /** Supported output formats selectable via the `--format` / `-f` flag. */
-export type OutputFormat = "json" | "table" | "quiet";
+export type OutputFormat = "json" | "table" | "quiet" | "pretty";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -160,14 +160,130 @@ function formatQuiet(data: unknown): void {
 }
 
 // ---------------------------------------------------------------------------
+// Format: pretty
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal ANSI helpers. Suppressed automatically when stdout isn't a TTY
+ * (or when NO_COLOR is set, per https://no-color.org/) so piped output stays
+ * machine-friendly.
+ */
+function colorize() {
+  const useColor = Boolean(process.stdout.isTTY) && !process.env.NO_COLOR;
+  const wrap = (code: string) => (s: string) =>
+    useColor ? `\x1b[${code}m${s}\x1b[0m` : s;
+  return {
+    dim: wrap("2"),
+    bold: wrap("1"),
+    green: wrap("32"),
+    cyan: wrap("36"),
+    yellow: wrap("33"),
+    red: wrap("31"),
+  };
+}
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return v !== null && typeof v === "object" && !Array.isArray(v);
+}
+
+/** `{ note: {...}, branch: {...} }` -- the shape returned by createNote. */
+function isCreateResult(v: unknown): v is { note: Record<string, unknown>; branch: Record<string, unknown> } {
+  return isRecord(v) && isRecord(v.note) && isRecord(v.branch) && typeof v.note.noteId === "string";
+}
+
+/** A single note (getNote / patchNote return shape). */
+function isNote(v: unknown): v is Record<string, unknown> {
+  return isRecord(v) && typeof v.noteId === "string" && typeof v.title === "string";
+}
+
+/** A search response: `{ results: EtapiNote[], debugInfo?: ... }`. */
+function isSearchResult(v: unknown): v is { results: Record<string, unknown>[] } {
+  return isRecord(v) && Array.isArray(v.results);
+}
+
+/** A void-style success acknowledgement, e.g. `{ success: true }`. */
+function isSuccess(v: unknown): v is { success: boolean } {
+  return isRecord(v) && v.success === true;
+}
+
+function pad(label: string, width = 10): string {
+  return label.length >= width ? label + " " : label + " ".repeat(width - label.length);
+}
+
+function renderKv(entries: ReadonlyArray<readonly [string, unknown]>): void {
+  const c = colorize();
+  for (const [k, raw] of entries) {
+    if (raw === undefined || raw === null || raw === "") continue;
+    const v = typeof raw === "string" ? raw : JSON.stringify(raw);
+    console.log(`  ${c.dim(pad(k))}${v}`);
+  }
+}
+
+function renderCreateResult(data: { note: Record<string, unknown>; branch: Record<string, unknown> }): void {
+  const c = colorize();
+  console.log(c.green("✓ Created note"));
+  renderKv([
+    ["title", data.note.title],
+    ["noteId", data.note.noteId],
+    ["type", data.note.type],
+    ["mime", data.note.mime],
+    ["parent", data.branch.parentNoteId],
+    ["branchId", data.branch.branchId],
+  ]);
+}
+
+function renderNote(note: Record<string, unknown>): void {
+  const c = colorize();
+  const title = typeof note.title === "string" ? note.title : "(untitled)";
+  console.log(c.bold(title));
+  renderKv([
+    ["noteId", note.noteId],
+    ["type", note.type],
+    ["mime", note.mime],
+    ["created", note.dateCreated],
+    ["modified", note.dateModified],
+    ["parents", Array.isArray(note.parentNoteIds) ? (note.parentNoteIds as string[]).join(", ") : undefined],
+  ]);
+}
+
+function renderSearchList(data: { results: Record<string, unknown>[] }): void {
+  const c = colorize();
+  if (data.results.length === 0) {
+    console.log(c.dim("No results."));
+    return;
+  }
+  for (const r of data.results) {
+    const id = typeof r.noteId === "string" ? r.noteId : "?";
+    const title = typeof r.title === "string" ? r.title : "(untitled)";
+    const type = typeof r.type === "string" ? r.type : "";
+    console.log(`${c.cyan(id)}  ${c.bold(title)} ${type ? c.dim(`[${type}]`) : ""}`);
+  }
+  console.log(c.dim(`\n${data.results.length} result${data.results.length === 1 ? "" : "s"}`));
+}
+
+function formatPretty(data: unknown): void {
+  const c = colorize();
+  if (isCreateResult(data)) return renderCreateResult(data);
+  if (isSearchResult(data)) return renderSearchList(data);
+  if (isNote(data)) return renderNote(data);
+  if (isSuccess(data)) {
+    console.log(c.green("✓ done"));
+    return;
+  }
+  // Unknown shape -- fall back to JSON so nothing is silently dropped.
+  formatJson(data);
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
 /**
  * Format and print `data` to stdout according to the chosen {@link OutputFormat}.
  *
- * - **json** (default) -- pretty-printed JSON, suitable for piping to `jq`.
- * - **table** -- human-friendly tabular view with smart column selection.
+ * - **pretty** (default) -- human-friendly, colorized when stdout is a TTY.
+ * - **json** -- pretty-printed JSON, suitable for piping to `jq`.
+ * - **table** -- tabular view with smart column selection.
  * - **quiet** -- print only the primary ID of each item, one per line.
  */
 export function formatOutput(format: OutputFormat, data: unknown): void {
@@ -180,6 +296,9 @@ export function formatOutput(format: OutputFormat, data: unknown): void {
       break;
     case "quiet":
       formatQuiet(data);
+      break;
+    case "pretty":
+      formatPretty(data);
       break;
     default: {
       const _exhaustive: never = format;

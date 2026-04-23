@@ -2,6 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import { EtapiClient } from "./client/index.js";
+import { CREATABLE_NOTE_TYPES, type CreatableNoteType } from "./client/types.js";
+import type { OutputFormat } from "./output.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -14,10 +16,31 @@ export interface CliGlobalArgs {
   format?: string;
 }
 
+/** User-overridable defaults applied to per-command flags when not provided. */
+export interface ResolvedDefaults {
+  /** Either an explicit noteId or a "#labelName" pointer (resolved at use site). */
+  defaultParent?: string;
+  defaultType?: CreatableNoteType;
+  defaultFormat?: OutputFormat;
+}
+
 /** Persisted configuration stored in the config file. */
 interface ConfigFile {
   serverUrl: string;
   authToken: string;
+  defaultParent?: string;
+  defaultType?: CreatableNoteType;
+  defaultFormat?: OutputFormat;
+}
+
+const VALID_FORMATS: readonly OutputFormat[] = ["json", "table", "quiet", "pretty"] as const;
+
+function isValidFormat(v: string): v is OutputFormat {
+  return (VALID_FORMATS as readonly string[]).includes(v);
+}
+
+function isValidType(v: string): v is CreatableNoteType {
+  return (CREATABLE_NOTE_TYPES as readonly string[]).includes(v);
 }
 
 // ---------------------------------------------------------------------------
@@ -44,10 +67,21 @@ function readConfigFile(filePath: string): ConfigFile | undefined {
     const parsed = JSON.parse(raw) as Partial<ConfigFile>;
 
     // Only return if the file contained at least one useful key.
-    if (parsed.serverUrl || parsed.authToken) {
+    if (
+      parsed.serverUrl ||
+      parsed.authToken ||
+      parsed.defaultParent ||
+      parsed.defaultType ||
+      parsed.defaultFormat
+    ) {
       return {
         serverUrl: parsed.serverUrl ?? "",
         authToken: parsed.authToken ?? "",
+        defaultParent: parsed.defaultParent,
+        defaultType:
+          parsed.defaultType && isValidType(parsed.defaultType) ? parsed.defaultType : undefined,
+        defaultFormat:
+          parsed.defaultFormat && isValidFormat(parsed.defaultFormat) ? parsed.defaultFormat : undefined,
       };
     }
     return undefined;
@@ -119,16 +153,51 @@ export function resolveConfig(argv: CliGlobalArgs): {
 }
 
 /**
- * Persist the given configuration to `~/.config/triliumnext-cli/config.json`,
- * creating the directory tree when it does not already exist.
+ * Resolve user-overridable defaults (parent note, note type, output format)
+ * using the same precedence chain as {@link resolveConfig}: env vars beat the
+ * config file. CLI flags are not consulted here -- per-command flags override
+ * at the call site.
+ *
+ * Unknown env values are silently dropped (rather than crashing the CLI) so
+ * a typo in `TRILIUM_DEFAULT_TYPE` falls back to the config-file value or
+ * the built-in default.
  */
-export function saveConfig(config: { serverUrl: string; authToken: string }): void {
+export function resolveDefaults(): ResolvedDefaults {
+  const fileConfig = loadConfigFile();
+
+  const envType = process.env.TRILIUM_DEFAULT_TYPE;
+  const envFormat = process.env.TRILIUM_DEFAULT_FORMAT;
+
+  return {
+    defaultParent: process.env.TRILIUM_DEFAULT_PARENT || fileConfig?.defaultParent,
+    defaultType:
+      envType && isValidType(envType) ? envType : fileConfig?.defaultType,
+    defaultFormat:
+      envFormat && isValidFormat(envFormat) ? envFormat : fileConfig?.defaultFormat,
+  };
+}
+
+/**
+ * Persist the given configuration to `~/.config/triliumnext-cli/config.json`,
+ * creating the directory tree when it does not already exist. Optional default
+ * keys are only written when present so the file stays minimal.
+ */
+export function saveConfig(config: {
+  serverUrl: string;
+  authToken: string;
+  defaultParent?: string;
+  defaultType?: CreatableNoteType;
+  defaultFormat?: OutputFormat;
+}): void {
   fs.mkdirSync(CONFIG_DIR, { recursive: true });
 
   const payload: ConfigFile = {
     serverUrl: config.serverUrl,
     authToken: config.authToken,
   };
+  if (config.defaultParent) payload.defaultParent = config.defaultParent;
+  if (config.defaultType) payload.defaultType = config.defaultType;
+  if (config.defaultFormat) payload.defaultFormat = config.defaultFormat;
 
   fs.writeFileSync(CONFIG_PATH_PRIMARY, JSON.stringify(payload, null, 2) + "\n", "utf-8");
 }

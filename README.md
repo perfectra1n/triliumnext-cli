@@ -13,21 +13,36 @@ A command-line interface for [TriliumNext Notes](https://github.com/TriliumNext/
 
 ## Installation
 
+### Download a prebuilt binary (recommended)
+
+Grab the latest binary for your platform from [GitHub Releases](https://github.com/perfectra1n/triliumnext-cli/releases):
+
 ```bash
-# Clone and build
+# One-liner install (Linux / macOS)
+curl -fsSL https://raw.githubusercontent.com/perfectra1n/triliumnext-cli/master/install.sh | bash
+```
+
+Or download manually:
+
+```bash
+# Example: Linux x64
+curl -fSL https://github.com/perfectra1n/triliumnext-cli/releases/latest/download/trilium-linux-x64 -o trilium
+chmod +x trilium
+sudo mv trilium /usr/local/bin/
+```
+
+Available binaries: `linux-x64`, `linux-arm64`, `darwin-x64`, `darwin-arm64`, `windows-x64`.
+
+### Build from source
+
+```bash
 git clone --recurse-submodules https://github.com/perfectra1n/triliumnext-cli
-cd cli
+cd triliumnext-cli
 bun install
-bun run build
+bun run build:compile   # standalone binary → ./trilium
 ```
 
-Then to link, so you can run `trilium` to access the CLI from anywhere:
-```bash
-# Link globally (optional)
-bun link
-```
-
-Requires [Bun](https://bun.sh/) for development. The built CLI runs on Node.js 20+ (no Bun required).
+Requires [Bun](https://bun.sh/) to build. The compiled binary has no runtime dependencies.
 
 ## Configuration
 
@@ -43,9 +58,28 @@ The CLI resolves connection settings in priority order:
 ```json
 {
   "serverUrl": "http://localhost:37740/etapi",
-  "authToken": "your-etapi-token"
+  "authToken": "your-etapi-token",
+  "defaultParent": "#clipperInbox",
+  "defaultType": "text",
+  "defaultFormat": "pretty"
 }
 ```
+
+`defaultParent`, `defaultType`, and `defaultFormat` are optional and tune the
+behavior of `notes create` and the global `--format` flag:
+
+- **`defaultParent`** -- where `notes create` puts new notes when `--parent`
+  is omitted. Either a noteId (e.g. `"abc123"`) or a label pointer
+  (e.g. `"#clipperInbox"`, `"#workspaceInbox"`). Labels are resolved at
+  create time via search; if no match exists, the note is placed under `root`.
+  When unset, the CLI looks for `#clipperInbox` automatically.
+- **`defaultType`** -- the note type used when `--type` is omitted. Defaults
+  to `"text"`.
+- **`defaultFormat`** -- the output format used when `-f`/`--format` is
+  omitted. Defaults to `"pretty"`.
+
+Each key has an env-var equivalent (highest precedence after the CLI flag):
+`TRILIUM_DEFAULT_PARENT`, `TRILIUM_DEFAULT_TYPE`, `TRILIUM_DEFAULT_FORMAT`.
 
 ### Login and save credentials
 
@@ -67,7 +101,7 @@ trilium <command> [options]
 |------|-------|-------------|
 | `--server <url>` | `-s` | Trilium server URL |
 | `--token <token>` | `-t` | ETAPI auth token |
-| `--format <fmt>` | `-f` | Output format: `json`, `table`, `quiet` |
+| `--format <fmt>` | `-f` | Output format: `pretty` (default), `json`, `table`, `quiet` |
 | `--help` | | Show help |
 
 ### Notes
@@ -79,17 +113,20 @@ trilium notes get <noteId>
 # Search notes
 trilium notes search "my query" --limit 10 --order-by title
 
-# Create a note
+# Create a note (uses defaults: --type text, --parent = #clipperInbox or root)
+trilium notes create --title "My Note" --content "Hello"
+
+# Override defaults explicitly
 trilium notes create --parent root --title "My Note" --type text --content "Hello"
 
 # Create from a file
-trilium notes create --parent root --title "From File" --type text --file ./notes.txt
+trilium notes create --title "From File" --file ./notes.txt
 
-# Create from stdin
-echo "piped content" | trilium notes create --parent root --title "Piped" --type text
+# Create from stdin (clipper-style: pipe markdown straight in)
+echo "# piped content" | trilium notes create --title "Piped" --markdown
 
 # Create with markdown (auto-converts to HTML)
-trilium notes create --parent root --title "MD Note" --type text --content "# Heading" --markdown
+trilium notes create --title "MD Note" --content "# Heading" --markdown
 
 # Update note metadata
 trilium notes patch <noteId> --title "New Title"
@@ -187,8 +224,11 @@ trilium system backup mybackup
 ## Output formats
 
 ```bash
-# Pretty JSON (default) -- great for piping to jq
-trilium notes get root | jq '.title'
+# Pretty (default) -- colorized when stdout is a TTY, plain when piped
+trilium notes get root
+
+# Pretty JSON -- machine-friendly, ideal for jq
+trilium notes get root -f json | jq '.title'
 
 # Human-readable table
 trilium notes search "journal" -f table
@@ -197,6 +237,9 @@ trilium notes search "journal" -f table
 NOTE_ID=$(trilium notes search "meeting" -f quiet | head -1)
 trilium notes get-content "$NOTE_ID"
 ```
+
+To make a different format your default, set `defaultFormat` in your config
+file or `TRILIUM_DEFAULT_FORMAT` in your environment.
 
 ## Development
 

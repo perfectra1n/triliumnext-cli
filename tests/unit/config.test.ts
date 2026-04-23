@@ -11,7 +11,7 @@ vi.mock('node:os', () => ({
   },
 }));
 
-import { resolveConfig, saveConfig, getClient } from '../../src/config.js';
+import { resolveConfig, resolveDefaults, saveConfig, getClient } from '../../src/config.js';
 
 describe('config', () => {
   const mockHomeDir = '/home/testuser';
@@ -27,6 +27,9 @@ describe('config', () => {
     // Clear environment variables
     delete process.env.TRILIUM_URL;
     delete process.env.TRILIUM_TOKEN;
+    delete process.env.TRILIUM_DEFAULT_PARENT;
+    delete process.env.TRILIUM_DEFAULT_TYPE;
+    delete process.env.TRILIUM_DEFAULT_FORMAT;
   });
 
   afterEach(() => {
@@ -241,6 +244,122 @@ describe('config', () => {
 
     it('throws when token cannot be resolved', () => {
       expect(() => getClient({})).toThrow(/Cannot resolve auth token/);
+    });
+  });
+
+  describe('resolveDefaults', () => {
+    it('returns empty object when nothing is set', () => {
+      expect(resolveDefaults()).toEqual({
+        defaultParent: undefined,
+        defaultType: undefined,
+        defaultFormat: undefined,
+      });
+    });
+
+    it('reads defaults from the config file', () => {
+      vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+        if (filePath === primaryConfigPath) {
+          return JSON.stringify({
+            serverUrl: 'http://x',
+            authToken: 't',
+            defaultParent: '#clipperInbox',
+            defaultType: 'text',
+            defaultFormat: 'pretty',
+          });
+        }
+        throw new Error('ENOENT');
+      });
+
+      expect(resolveDefaults()).toEqual({
+        defaultParent: '#clipperInbox',
+        defaultType: 'text',
+        defaultFormat: 'pretty',
+      });
+    });
+
+    it('env vars override the config file', () => {
+      vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+        if (filePath === primaryConfigPath) {
+          return JSON.stringify({
+            serverUrl: 'http://x',
+            authToken: 't',
+            defaultParent: 'fileParent',
+            defaultType: 'text',
+            defaultFormat: 'json',
+          });
+        }
+        throw new Error('ENOENT');
+      });
+      process.env.TRILIUM_DEFAULT_PARENT = 'envParent';
+      process.env.TRILIUM_DEFAULT_TYPE = 'code';
+      process.env.TRILIUM_DEFAULT_FORMAT = 'table';
+
+      expect(resolveDefaults()).toEqual({
+        defaultParent: 'envParent',
+        defaultType: 'code',
+        defaultFormat: 'table',
+      });
+    });
+
+    it('drops invalid env values rather than crashing', () => {
+      process.env.TRILIUM_DEFAULT_TYPE = 'not-a-real-type';
+      process.env.TRILIUM_DEFAULT_FORMAT = 'csv';
+
+      expect(resolveDefaults()).toEqual({
+        defaultParent: undefined,
+        defaultType: undefined,
+        defaultFormat: undefined,
+      });
+    });
+
+    it('drops invalid file values rather than crashing', () => {
+      vi.mocked(fs.readFileSync).mockImplementation((filePath) => {
+        if (filePath === primaryConfigPath) {
+          return JSON.stringify({
+            serverUrl: 'http://x',
+            authToken: 't',
+            defaultType: 'bogus',
+            defaultFormat: 'bogus',
+          });
+        }
+        throw new Error('ENOENT');
+      });
+
+      const r = resolveDefaults();
+      expect(r.defaultType).toBeUndefined();
+      expect(r.defaultFormat).toBeUndefined();
+    });
+  });
+
+  describe('saveConfig with defaults', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      vi.mocked(fs.mkdirSync).mockReturnValue(undefined);
+      vi.mocked(fs.writeFileSync).mockReturnValue(undefined);
+    });
+
+    it('persists optional default keys when present', () => {
+      saveConfig({
+        serverUrl: 'http://x',
+        authToken: 't',
+        defaultParent: '#clipperInbox',
+        defaultType: 'text',
+        defaultFormat: 'pretty',
+      });
+
+      const written = vi.mocked(fs.writeFileSync).mock.calls[0][1] as string;
+      expect(written).toContain('"defaultParent": "#clipperInbox"');
+      expect(written).toContain('"defaultType": "text"');
+      expect(written).toContain('"defaultFormat": "pretty"');
+    });
+
+    it('omits optional keys when not provided', () => {
+      saveConfig({ serverUrl: 'http://x', authToken: 't' });
+
+      const written = vi.mocked(fs.writeFileSync).mock.calls[0][1] as string;
+      expect(written).not.toContain('defaultParent');
+      expect(written).not.toContain('defaultType');
+      expect(written).not.toContain('defaultFormat');
     });
   });
 });

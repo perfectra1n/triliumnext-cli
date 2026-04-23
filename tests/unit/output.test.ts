@@ -198,6 +198,80 @@ describe('output', () => {
     });
   });
 
+  describe('formatOutput - pretty', () => {
+    // Force non-TTY so ANSI codes are stripped, making assertions stable.
+    const origIsTTY = process.stdout.isTTY;
+    beforeEach(() => {
+      Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
+    });
+    afterEach(() => {
+      Object.defineProperty(process.stdout, 'isTTY', { value: origIsTTY, configurable: true });
+    });
+
+    it('renders a createNote result with note + branch fields', () => {
+      formatOutput('pretty', {
+        note: { noteId: 'n1', title: 'Hi', type: 'text', mime: 'text/html' },
+        branch: { branchId: 'b1', parentNoteId: 'root' },
+      });
+
+      const lines = consoleSpy.log.mock.calls.map((c) => c[0] as string);
+      expect(lines[0]).toContain('Created note');
+      expect(lines.join('\n')).toContain('Hi');
+      expect(lines.join('\n')).toContain('n1');
+      expect(lines.join('\n')).toContain('root');
+      expect(lines.join('\n')).toContain('b1');
+    });
+
+    it('renders a single note with title + key metadata', () => {
+      formatOutput('pretty', {
+        noteId: 'n1',
+        title: 'My Note',
+        type: 'text',
+        mime: 'text/html',
+        dateCreated: '2026-01-01',
+        dateModified: '2026-01-02',
+        parentNoteIds: ['root'],
+      });
+
+      const text = consoleSpy.log.mock.calls.map((c) => c[0] as string).join('\n');
+      expect(text).toContain('My Note');
+      expect(text).toContain('n1');
+      expect(text).toContain('text');
+    });
+
+    it('renders a search result list with count footer', () => {
+      formatOutput('pretty', {
+        results: [
+          { noteId: 'a', title: 'Alpha', type: 'text' },
+          { noteId: 'b', title: 'Beta', type: 'code' },
+        ],
+      });
+
+      const text = consoleSpy.log.mock.calls.map((c) => c[0] as string).join('\n');
+      expect(text).toContain('Alpha');
+      expect(text).toContain('Beta');
+      expect(text).toContain('2 results');
+    });
+
+    it('renders an empty search result with a hint', () => {
+      formatOutput('pretty', { results: [] });
+      expect(consoleSpy.log).toHaveBeenCalledWith('No results.');
+    });
+
+    it('renders success markers', () => {
+      formatOutput('pretty', { success: true });
+      const text = consoleSpy.log.mock.calls[0][0] as string;
+      expect(text).toContain('done');
+    });
+
+    it('falls back to JSON for unknown shapes', () => {
+      formatOutput('pretty', { weird: 'shape' });
+      const out = consoleSpy.log.mock.calls[0][0] as string;
+      expect(out).toContain('"weird"');
+      expect(out).toContain('"shape"');
+    });
+  });
+
   describe('outputBinary', () => {
     const mockBuffer = Buffer.from('binary content');
 

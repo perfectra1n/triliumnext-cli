@@ -1,11 +1,12 @@
 import type { Argv } from "yargs";
 import { readFileSync } from "node:fs";
-import { getClient, type CliGlobalArgs } from "../config.js";
+import { getClient, resolveDefaults, type CliGlobalArgs } from "../config.js";
 import { formatOutput, outputBinary, type OutputFormat } from "../output.js";
 import { handleError } from "../errors.js";
 import { readStdin } from "../stdin.js";
 import { convertToHtml, htmlToMarkdown } from "../utils/markdown.js";
 import { loadAttachmentFromPath, processFiles, processImages } from "../utils/attachments.js";
+import { resolveDefaultParent } from "../utils/inbox.js";
 import { CREATABLE_NOTE_TYPES, type CreatableNoteType, type NoteType } from "../client/types.js";
 
 function toStringArray(v: unknown): string[] {
@@ -109,8 +110,9 @@ export function registerNotesCommands(yargs: Argv) {
                 y
                     .option("parent", {
                         type: "string",
-                        demandOption: true,
-                        description: "Parent note ID (parentNoteId)",
+                        description:
+                            "Parent note ID (parentNoteId). Defaults to the note tagged " +
+                            "#clipperInbox, or `defaultParent` from config, or root.",
                     })
                     .option("title", {
                         type: "string",
@@ -119,9 +121,8 @@ export function registerNotesCommands(yargs: Argv) {
                     })
                     .option("type", {
                         type: "string",
-                        demandOption: true,
                         choices: CREATABLE_NOTE_TYPES,
-                        description: "Note type",
+                        description: "Note type. Defaults to `defaultType` from config, or 'text'.",
                     })
                     .option("content", {
                         type: "string",
@@ -207,10 +208,25 @@ export function registerNotesCommands(yargs: Argv) {
                     }
 
                     const client = getClient(argv as CliGlobalArgs);
+                    const defaults = resolveDefaults();
+
+                    // Type: CLI > config > "text". yargs already enforces choices on
+                    // CLI input; config-sourced values are validated in resolveDefaults.
+                    const type: CreatableNoteType =
+                        (argv.type as CreatableNoteType | undefined) ??
+                        defaults.defaultType ??
+                        "text";
+
+                    // Parent: CLI > resolveDefaultParent (handles config + #label lookup
+                    // + root fallback). Skip the lookup when the user passed --parent.
+                    const parentNoteId =
+                        (argv.parent as string | undefined) ??
+                        (await resolveDefaultParent(client, defaults.defaultParent));
+
                     const result = await client.createNote({
-                        parentNoteId: argv.parent as string,
+                        parentNoteId,
                         title: argv.title as string,
-                        type: argv.type as CreatableNoteType,
+                        type,
                         content: noteContent,
                         mime: argv.mime as string | undefined,
                         notePosition: argv.position as number | undefined,

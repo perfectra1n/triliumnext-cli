@@ -8,6 +8,7 @@ import { registerRevisionsCommands } from "./commands/revisions.js";
 import { registerCalendarCommands } from "./commands/calendar.js";
 import { registerAuthCommands } from "./commands/auth.js";
 import { registerSystemCommands } from "./commands/system.js";
+import { resolveDefaults } from "./config.js";
 
 const cli = yargs(hideBin(process.argv))
     .scriptName("trilium")
@@ -25,9 +26,16 @@ const cli = yargs(hideBin(process.argv))
     .option("format", {
         alias: "f",
         type: "string",
-        choices: ["json", "table", "quiet"] as const,
-        default: "json" as const,
-        description: "Output format",
+        choices: ["json", "table", "quiet", "pretty"] as const,
+        // No yargs `default` here on purpose: the middleware below applies the
+        // user's `defaultFormat` from config (or "pretty" as a final fallback)
+        // so config can override the built-in default.
+        description: "Output format (default: pretty, or `defaultFormat` from config)",
+    })
+    .middleware((argv) => {
+        if (argv.format === undefined) {
+            argv.format = resolveDefaults().defaultFormat ?? "pretty";
+        }
     })
     .command("notes", "Manage notes", registerNotesCommands)
     .command("branches", "Manage branches", registerBranchesCommands)

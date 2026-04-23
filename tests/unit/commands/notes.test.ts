@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { Argv } from 'yargs';
 import { createMockClient } from '../../helpers/mock-client.js';
 
-vi.mock('../../../src/config.js', () => ({ getClient: vi.fn() }));
+vi.mock('../../../src/config.js', () => ({
+  getClient: vi.fn(),
+  resolveDefaults: vi.fn(() => ({})),
+}));
 vi.mock('../../../src/output.js', () => ({ formatOutput: vi.fn(), outputBinary: vi.fn() }));
 vi.mock('../../../src/errors.js', () => ({ handleError: vi.fn() }));
 vi.mock('../../../src/stdin.js', () => ({ readStdin: vi.fn() }));
